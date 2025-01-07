@@ -228,19 +228,22 @@ class DataLoader(metaclass=ABCMeta):
                     and encoded[col].min() == 0
                     and encoded[col].max() == len(encoded[col].unique()) - 1
                 ):
+                    print(f"Skipping {col} as it is already encoded")
                     continue
 
-                if (
+                elif (
                     encoded[col].infer_objects().dtype.kind in ["O", "b"]
-                    or len(encoded[col].unique()) < 15
+                    and len(encoded[col].unique()) < 11
                 ):
                     encoder = LabelEncoder().fit(encoded[col])
                     encoded[col] = encoder.transform(encoded[col])
                     encoders[col] = encoder
+                    print(f"Encoding {col} with {len(encoder.classes_)} classes")
                 elif encoded[col].infer_objects().dtype.kind in ["M"]:
                     encoder = DatetimeEncoder().fit(encoded[col])
                     encoded[col] = encoder.transform(encoded[col]).values
                     encoders[col] = encoder
+                    print(f"Encoding {col} as datetime")
         return self.from_info(encoded, self.info()), encoders
 
     def decode(

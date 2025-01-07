@@ -208,8 +208,10 @@ class Metrics:
         """
         X_gt_df = X_gt.dataframe()
         X_syn_df = X_syn.dataframe()
-        X_enc = create_from_info(pd.concat([X_gt_df, X_syn_df]), X_gt.info())
+        X_enc = create_from_info(pd.concat([X_gt_df, X_syn_df], ignore_index=True), X_gt.info()) ##############################
+        X_enc.dataframe().info() ##############################
         _, encoders = X_enc.encode()
+        print(encoders) ##############################
 
         # now we encode the data
         X_gt, _ = X_gt.encode(encoders)
