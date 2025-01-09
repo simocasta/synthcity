@@ -205,20 +205,15 @@ class Metrics:
         We need to encode the categorical data in the real and synthetic data.
         To ensure each category in the two datasets are mapped to the same one hot vector, we merge all avalable datasets for computing the encoder.
         """
-<<<<<<< HEAD
-        X_gt_df = X_gt.dataframe()
-        X_syn_df = X_syn.dataframe()
-        X_enc = create_from_info(pd.concat([X_gt_df, X_syn_df], ignore_index=True), X_gt.info())
-=======
-        all_df = pd.concat([X_gt.dataframe(), X_syn.dataframe()])
+        all_df = pd.concat([X_gt.dataframe(), X_syn.dataframe()], ignore_index=True)
         if X_train:
-            all_df = pd.concat([all_df, X_train.dataframe()])
+            all_df = pd.concat([all_df, X_train.dataframe()], ignore_index=True)
         if X_ref_syn:
-            all_df = pd.concat([all_df, X_ref_syn.dataframe()])
+            all_df = pd.concat([all_df, X_ref_syn.dataframe()], ignore_index=True)
         if X_augmented:
-            all_df = pd.concat([all_df, X_augmented.dataframe()])
+            all_df = pd.concat([all_df, X_augmented.dataframe()], ignore_index=True)
         X_enc = create_from_info(all_df, X_gt.info())
->>>>>>> upstream/main
+        
         _, encoders = X_enc.encode()
 
         # now we encode the data
