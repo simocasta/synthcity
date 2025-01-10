@@ -1,5 +1,6 @@
 # third party
 import pandas as pd
+from typing import List, Tuple, Union
 
 
 def constant_columns(dataframe: pd.DataFrame) -> list:
@@ -10,14 +11,18 @@ def constant_columns(dataframe: pd.DataFrame) -> list:
 
 
 def discrete_columns(
-    dataframe: pd.DataFrame, max_classes: int = 10, return_counts: bool = False
-) -> list:
+    dataframe: pd.DataFrame, return_counts: bool = False
+) -> List[Union[str, Tuple[str, int]]]:
     """
-    Find columns containing discrete values in a pandas dataframe.
+    Identify columns in a pandas DataFrame that contain discrete (integer or boolean) values.
     """
-    return [
-        (col, cnt) if return_counts else col
-        for col, vals in dataframe.items()
-        for cnt in [vals.nunique()]
-        if cnt <= max_classes
-    ]
+    discrete_cols = []
+    for col in dataframe.columns:
+        if pd.api.types.is_integer_dtype(dataframe[col]) or pd.api.types.is_bool_dtype(dataframe[col]):
+            if return_counts:
+                unique_count = dataframe[col].nunique()
+                discrete_cols.append((col, unique_count))
+            else:
+                discrete_cols.append(col)
+    return discrete_cols
+
