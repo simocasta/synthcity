@@ -233,7 +233,7 @@ class DataLoader(metaclass=ABCMeta):
 
                 elif (
                     encoded[col].infer_objects().dtype.kind in ["O", "b"]
-                    and len(encoded[col].unique()) < 11
+                    and len(encoded[col].unique()) < 15
                 ):
                     encoder = LabelEncoder().fit(encoded[col])
                     encoded[col] = encoder.transform(encoded[col])
