@@ -120,6 +120,8 @@ class Metrics:
         workspace: Path = Path("workspace"),
         use_cache: bool = True,
         n_folds: int = 5,
+        domias_reference_size: int = 100,
+        domias_member_size: Optional[int] = None,
     ) -> pd.DataFrame:
         """Core evaluation logic for the metrics
 
@@ -155,6 +157,12 @@ class Metrics:
             The folder for caching intermediary results.
         use_cache: bool
             If the a metric has been previously run and is cached, it will be reused for the experiments. Defaults to True.
+        domias_reference_size: int
+            Number of held-out real records used to estimate the reference density for DOMIAS.
+        domias_member_size: Optional[int]
+            Number of generator-training members and held-out non-members used by DOMIAS.
+            If omitted, uses the largest balanced sample that leaves
+            ``domias_reference_size`` held-out reference records.
         """
         workspace.mkdir(parents=True, exist_ok=True)
 
@@ -201,6 +209,26 @@ class Metrics:
         if metrics is None:
             metrics = Metrics.list()
 
+        privacy_metrics = metrics.get("privacy", [])
+        if isinstance(privacy_metrics, str):
+            privacy_metrics = [privacy_metrics]
+        has_domias = any("DomiasMIA" in name for name in privacy_metrics)
+
+        if has_domias:
+            if X_train is None:
+                raise ValueError("DOMIAS requires X_train containing generator members")
+            if X_ref_syn is None:
+                raise ValueError("DOMIAS requires X_ref_syn reference synthetic data")
+            if domias_reference_size <= 0:
+                raise ValueError("domias_reference_size must be a positive integer")
+            if domias_member_size is not None and domias_member_size <= 0:
+                raise ValueError("domias_member_size must be a positive integer")
+            if X_gt.hash() == X_train.hash():
+                raise ValueError(
+                    "DOMIAS requires distinct X_gt (held-out non-members/reference) "
+                    "and X_train (generator-training members)"
+                )
+
         """
         We need to encode the categorical data in the real and synthetic data.
         To ensure each category in the two datasets are mapped to the same one hot vector, we merge all avalable datasets for computing the encoder.
@@ -213,7 +241,7 @@ class Metrics:
         if X_augmented:
             all_df = pd.concat([all_df, X_augmented.dataframe()], ignore_index=True)
         X_enc = create_from_info(all_df, X_gt.info())
-        
+
         _, encoders = X_enc.encode()
 
         # now we encode the data
@@ -264,7 +292,8 @@ class Metrics:
                     X_syn,
                     X_train,
                     X_ref_syn,
-                    reference_size=10,  # TODO: review this
+                    reference_size=domias_reference_size,
+                    member_size=domias_member_size,
                 )
             else:
                 scores.queue(

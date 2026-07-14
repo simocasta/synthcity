@@ -1,5 +1,6 @@
 # stdlib
 import random
+import warnings
 from abc import ABCMeta, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -301,7 +302,7 @@ class GenericDataLoader(DataLoader):
         >>> X["target"] = y
         >>> # Important note: preprocessing data with OneHotEncoder or StandardScaler is not needed or recommended.
         >>> # Synthcity handles feature encoding and standardization internally.
-        >>> loader = GenericDataLoader(X, target_column="target", sensitive_columns=["sex"],)
+        >>> loader = GenericDataLoader(X, target_column="target", sensitive_features=["sex"],)
     """
 
     @validate_arguments(config=dict(arbitrary_types_allowed=True))
@@ -317,6 +318,22 @@ class GenericDataLoader(DataLoader):
         train_size: float = 0.8,
         **kwargs: Any,
     ) -> None:
+        legacy_sensitive_features = kwargs.pop("sensitive_columns", None)
+        if legacy_sensitive_features is not None:
+            warnings.warn(
+                "'sensitive_columns' is deprecated; use 'sensitive_features' instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if sensitive_features and list(sensitive_features) != list(
+                legacy_sensitive_features
+            ):
+                raise ValueError(
+                    "Received conflicting values for 'sensitive_features' and "
+                    "deprecated 'sensitive_columns'"
+                )
+            sensitive_features = list(legacy_sensitive_features)
+
         if not isinstance(data, pd.DataFrame):
             data = pd.DataFrame(data)
 

@@ -2,6 +2,7 @@
 import pandas as pd
 import pytest
 from sklearn.datasets import load_iris
+from sklearn.model_selection import train_test_split
 
 # synthcity absolute
 from synthcity.benchmark.utils import augment_data
@@ -55,6 +56,37 @@ def test_list() -> None:
             "performance",
         ]
     )
+
+
+def test_domias_api_uses_explicit_balanced_holdout(tmp_path) -> None:
+    X, y = load_iris(return_X_y=True, as_frame=True)
+    X_train_df, X_gt_df = train_test_split(
+        X,
+        train_size=50,
+        random_state=0,
+        stratify=y,
+    )
+    X_train = GenericDataLoader(X_train_df)
+    X_gt = GenericDataLoader(X_gt_df)
+
+    model = Plugins().get("dummy_sampler")
+    model.fit(X_train)
+    X_syn = model.generate(200)
+    X_ref_syn = model.generate(200)
+
+    out = Metrics.evaluate(
+        X_gt,
+        X_syn,
+        X_train=X_train,
+        X_ref_syn=X_ref_syn,
+        metrics={"privacy": ["DomiasMIA_prior"]},
+        domias_reference_size=10,
+        domias_member_size=40,
+        workspace=tmp_path,
+        use_cache=False,
+    )
+
+    assert "privacy.DomiasMIA_prior.aucroc" in out.index
 
 
 @pytest.mark.parametrize(

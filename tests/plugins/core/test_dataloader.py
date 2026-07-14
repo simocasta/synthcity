@@ -107,6 +107,26 @@ def test_generic_dataloader_info() -> None:
     assert new_loader.info() == loader.info()
 
 
+def test_generic_dataloader_sensitive_columns_alias() -> None:
+    X, _ = load_breast_cancer(return_X_y=True, as_frame=True)
+
+    with pytest.warns(DeprecationWarning, match="sensitive_features"):
+        loader = GenericDataLoader(X, sensitive_columns=[X.columns[0]])
+
+    assert loader.sensitive_features == [X.columns[0]]
+
+
+def test_generic_dataloader_rejects_conflicting_sensitive_arguments() -> None:
+    X, _ = load_breast_cancer(return_X_y=True, as_frame=True)
+
+    with pytest.raises(ValueError, match="conflicting values"):
+        GenericDataLoader(
+            X,
+            sensitive_features=[X.columns[0]],
+            sensitive_columns=[X.columns[1]],
+        )
+
+
 def test_generic_dataloader_pack_unpack() -> None:
     X, y = load_breast_cancer(return_X_y=True, as_frame=True)
 

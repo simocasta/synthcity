@@ -1,8 +1,9 @@
 # stdlib
+import hashlib
 import platform
 from abc import abstractmethod
 from collections import Counter
-from typing import Any, Dict, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 # third party
 import numpy as np
@@ -48,9 +49,26 @@ class PrivacyEvaluator(MetricEvaluator):
     def evaluate(
         self, X_gt: DataLoader, X_syn: DataLoader, *args: Any, **kwargs: Any
     ) -> Dict:
+        def cache_token(value: Any) -> str:
+            if isinstance(value, DataLoader):
+                return f"dataloader:{value.hash()}"
+            return f"{type(value).__name__}:{value!r}"
+
+        cache_payload = [
+            f"reduction:{self._reduction}",
+            f"bins:{self._n_histogram_bins}",
+            f"folds:{self._n_folds}",
+            f"task:{self._task_type}",
+            f"seed:{self._random_state}",
+        ]
+        cache_payload.extend(cache_token(value) for value in args)
+        cache_payload.extend(
+            f"{key}:{cache_token(value)}" for key, value in sorted(kwargs.items())
+        )
+        context_hash = hashlib.sha256("|".join(cache_payload).encode()).hexdigest()[:16]
         cache_file = (
             self._workspace
-            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{self._reduction}_{platform.python_version()}.bkp"
+            / f"sc_metric_cache_{self.type()}_{self.name()}_{X_gt.hash()}_{X_syn.hash()}_{context_hash}_{platform.python_version()}.bkp"
         )
         if self.use_cache(cache_file):
             return load_from_file(cache_file)
@@ -72,8 +90,11 @@ class kAnonymization(PrivacyEvaluator):
     .. inheritance-diagram:: synthcity.metrics.eval_privacy.kAnonymization
         :parts: 1
 
-    Returns the k-anon ratio between the real data and the synthetic data.
-    For each dataset, it is computed the value k which satisfies the k-anonymity rule: each record is similar to at least another k-1 other records on the potentially identifying variables.
+    Returns a cluster-minimum-size anonymity proxy for real and synthetic data.
+
+    This metric clusters the non-sensitive features with several fixed k-means
+    configurations and returns the smallest cluster size. It is not formal
+    equivalence-class k-anonymity and should not be reported as such.
     """
 
     def __init__(self, **kwargs: Any) -> None:
@@ -416,6 +437,7 @@ class DomiasMIA(PrivacyEvaluator):
         X_train: DataLoader,
         X_ref_syn: DataLoader,
         reference_size: int,
+        member_size: Optional[int] = None,
     ) -> float:
         return self.evaluate(
             X_gt,
@@ -423,7 +445,55 @@ class DomiasMIA(PrivacyEvaluator):
             X_train,
             X_ref_syn,
             reference_size=reference_size,
+            member_size=member_size,
         )[self._default_metric]
+
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
+    def evaluate(
+        self,
+        X_gt: DataLoader,
+        X_syn: DataLoader,
+        X_train: DataLoader,
+        X_ref_syn: DataLoader,
+        reference_size: int = 100,
+        member_size: Optional[int] = None,
+        device: Any = DEVICE,
+    ) -> Dict:
+        """Evaluate DOMIAS with balanced, disjoint evaluation slices."""
+        if reference_size <= 0:
+            raise ValueError("reference_size must be a positive integer")
+        if member_size is not None and member_size <= 0:
+            raise ValueError("member_size must be a positive integer")
+        if X_gt.hash() == X_train.hash():
+            raise ValueError(
+                "X_gt must contain held-out non-members/reference records and "
+                "must differ from generator-training X_train"
+            )
+
+        resolved_member_size = member_size
+        if resolved_member_size is None:
+            resolved_member_size = min(len(X_train), len(X_gt) - reference_size)
+        if resolved_member_size <= 0:
+            raise ValueError(
+                "X_gt is too small after reserving the requested reference set"
+            )
+        if resolved_member_size > len(X_train):
+            raise ValueError("member_size exceeds the number of X_train records")
+        if resolved_member_size + reference_size > len(X_gt):
+            raise ValueError(
+                "X_gt must contain at least member_size non-members plus "
+                "reference_size separate reference records"
+            )
+
+        return super().evaluate(
+            X_gt,
+            X_syn,
+            X_train,
+            X_ref_syn,
+            reference_size=reference_size,
+            member_size=resolved_member_size,
+            device=device,
+        )
 
     @abstractmethod
     def evaluate_p_R(
@@ -446,6 +516,7 @@ class DomiasMIA(PrivacyEvaluator):
         X_train: Union[DataLoader, Any],
         synth_val_set: Union[DataLoader, Any],
         reference_size: int = 100,  # look at default sizes
+        member_size: Optional[int] = None,
         device: Any = DEVICE,
     ) -> Dict:
         """
@@ -465,6 +536,9 @@ class DomiasMIA(PrivacyEvaluator):
                 The dataset used to calculate the density of the synthetic data
             reference_size: int
                 The size of the reference dataset
+            member_size: Optional[int]
+                Number of members and non-members used to evaluate the attack.
+                Members are sampled from X_train and non-members from X_gt.
             device: PyTorch device
                 CPU or CUDA
 
@@ -472,9 +546,12 @@ class DomiasMIA(PrivacyEvaluator):
             A dictionary with the AUCROC and accuracy scores for the attack.
         """
 
-        mem_set = X_train.dataframe()
+        if member_size is None:
+            member_size = min(len(X_train), len(X_gt) - reference_size)
+
+        mem_set = X_train.numpy()[:member_size]
         non_mem_set, reference_set = (
-            X_gt.numpy()[:reference_size],
+            X_gt.numpy()[:member_size],
             X_gt.numpy()[-reference_size:],
         )
 
