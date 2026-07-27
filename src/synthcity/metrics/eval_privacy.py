@@ -662,12 +662,26 @@ class DomiasMIABNAF(DomiasMIA):
         X_test: np.ndarray,
         device: Any,
     ) -> Tuple[np.ndarray, np.ndarray]:
+        np.random.seed(self._random_state)
+        torch.manual_seed(self._random_state)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(self._random_state)
         _, p_G_model = _utils.density_estimator_trainer(
             synth_set.values,
             synth_val_set.values[: int(0.5 * synth_val_set.shape[0])],
             synth_val_set.values[int(0.5 * synth_val_set.shape[0]) :],
+            workspace=self._workspace / "synthetic_density",
+            load=self._use_cache,
         )
-        _, p_R_model = _utils.density_estimator_trainer(reference_set)
+        np.random.seed(self._random_state + 1)
+        torch.manual_seed(self._random_state + 1)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(self._random_state + 1)
+        _, p_R_model = _utils.density_estimator_trainer(
+            reference_set,
+            workspace=self._workspace / "real_density",
+            load=self._use_cache,
+        )
         p_G_evaluated = np.exp(
             _utils.compute_log_p_x(
                 p_G_model, torch.as_tensor(X_test).float().to(device)

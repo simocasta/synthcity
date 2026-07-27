@@ -331,7 +331,7 @@ def save_model(
                     "optimizer": optimizer.state_dict(),
                     "epoch": epoch,
                 },
-                workspace / "DomiasMIA_bnaf_checkpoint.pt",
+                workspace / "checkpoint.pt",
             )  # nosec B614
 
     return f
@@ -343,14 +343,16 @@ def load_model(
     workspace: Path = Path("workspace"),
 ) -> Callable:
     def f() -> None:
-        if workspace.exists():
+        if not workspace.exists():
             return
 
+        checkpoint_path = workspace / "checkpoint.pt"
+        if not checkpoint_path.exists():
+            return
         log.info("Loading model..")
-        if (workspace / "checkpoint.pt").exists():
-            checkpoint = torch.load(workspace / "checkpoint.pt")  # nosec B614
-            model.load_state_dict(checkpoint["model"])
-            optimizer.load_state_dict(checkpoint["optimizer"])
+        checkpoint = torch.load(checkpoint_path)  # nosec B614
+        model.load_state_dict(checkpoint["model"])
+        optimizer.load_state_dict(checkpoint["optimizer"])
 
     return f
 

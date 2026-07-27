@@ -119,6 +119,7 @@ class Metrics:
         random_state: int = 0,
         workspace: Path = Path("workspace"),
         use_cache: bool = True,
+        raise_on_error: bool = False,
         n_folds: int = 5,
         domias_reference_size: int = 100,
         domias_member_size: Optional[int] = None,
@@ -157,6 +158,9 @@ class Metrics:
             The folder for caching intermediary results.
         use_cache: bool
             If the a metric has been previously run and is cached, it will be reused for the experiments. Defaults to True.
+        raise_on_error: bool
+            If True, propagate metric evaluator failures with the evaluator name
+            instead of returning an empty result for a failed evaluator.
         domias_reference_size: int
             Number of held-out real records used to estimate the reference density for DOMIAS.
         domias_member_size: Optional[int]
@@ -310,7 +314,7 @@ class Metrics:
                     X_syn.sample(eval_cnt),
                 )
 
-        scores.compute()
+        scores.compute(raise_on_error=raise_on_error)
 
         return scores.to_dataframe()
 

@@ -7,6 +7,7 @@ from typing import Any, Tuple, Type
 import numpy as np
 import pandas as pd
 import pytest
+import torch
 from sklearn.datasets import load_iris
 from torchvision import datasets
 
@@ -208,3 +209,56 @@ def test_domias_cache_includes_member_and_reference_context(tmp_path: Path) -> N
 
     evaluator.evaluate(X_gt, X_syn, X_train_b, X_ref_syn, **kwargs)
     assert evaluator.calls == 2
+
+
+def test_bnaf_domias_uses_isolated_seeded_density_workspaces(
+    monkeypatch, tmp_path: Path
+) -> None:
+    calls = []
+
+    class _Values:
+        def __init__(self, values: np.ndarray) -> None:
+            self.values = values
+            self.shape = values.shape
+
+    def fake_density_trainer(*args: Any, **kwargs: Any) -> Tuple[None, object]:
+        calls.append(kwargs)
+        return None, object()
+
+    def fake_log_density(model: object, values: torch.Tensor) -> torch.Tensor:
+        return torch.zeros(values.shape[0], device=values.device)
+
+    monkeypatch.setattr(
+        "synthcity.metrics._utils.density_estimator_trainer",
+        fake_density_trainer,
+    )
+    monkeypatch.setattr(
+        "synthcity.metrics._utils.compute_log_p_x",
+        fake_log_density,
+    )
+
+    evaluator = DomiasMIABNAF(
+        workspace=tmp_path,
+        use_cache=False,
+        random_state=17,
+    )
+    synth = _Values(np.arange(60, dtype=float).reshape(20, 3))
+    synth_reference = _Values(np.arange(60, 120, dtype=float).reshape(20, 3))
+    reference = np.arange(30, dtype=float).reshape(10, 3)
+    test = np.arange(24, dtype=float).reshape(8, 3)
+
+    generated_density, real_density = evaluator.evaluate_p_R(
+        synth,
+        synth_reference,
+        reference,
+        test,
+        torch.device("cpu"),
+    )
+
+    assert len(calls) == 2
+    assert calls[0]["workspace"] == tmp_path / "synthetic_density"
+    assert calls[1]["workspace"] == tmp_path / "real_density"
+    assert calls[0]["load"] is False
+    assert calls[1]["load"] is False
+    np.testing.assert_array_equal(generated_density, np.ones(len(test)))
+    np.testing.assert_array_equal(real_density, np.ones(len(test)))

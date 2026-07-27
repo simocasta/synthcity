@@ -1,7 +1,7 @@
 # stdlib
 import multiprocessing
 import time
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 # third party
 import numpy as np
@@ -26,7 +26,7 @@ def _safe_evaluate(
     evaluator: MetricEvaluator,
     *args: Any,
     **kwargs: Any,
-) -> Tuple[str, Dict, bool, float, str]:
+) -> Tuple[str, Dict, bool, float, str, Optional[str]]:
     start = time.time()
     log.debug(f" >> Evaluating metric {evaluator.fqdn()}")
     failed = False
@@ -44,7 +44,14 @@ def _safe_evaluate(
     if err is not None:
         log.error(f" >> Evaluator {evaluator.fqdn()} failed: {err}")
 
-    return evaluator.fqdn(), result, failed, duration, evaluator.direction()
+    return (
+        evaluator.fqdn(),
+        result,
+        failed,
+        duration,
+        evaluator.direction(),
+        err,
+    )
 
 
 class ScoreEvaluator:
@@ -80,15 +87,23 @@ class ScoreEvaluator:
     ) -> None:
         self.pending_tasks.append((evaluator, args, kwargs))
 
-    def compute(self) -> None:
+    def compute(self, *, raise_on_error: bool = False) -> None:
         results = dispatcher(
             delayed(_safe_evaluate)(evaluator, *args, **kwargs)
             for (evaluator, args, kwargs) in self.pending_tasks
         )
         self.pending_tasks = []
 
-        for key, result, failed, duration, direction in results:
+        failures = []
+        for key, result, failed, duration, direction, error in results:
             self.add_multiple(key, result, failed, duration, direction)
+            if failed:
+                failures.append(f"{key}: {error or 'unknown evaluator failure'}")
+
+        if failures and raise_on_error:
+            raise RuntimeError(
+                "Metric evaluator failure(s): " + "; ".join(failures)
+            )
 
     def to_dataframe(self) -> pd.DataFrame:
         output_metrics = [
