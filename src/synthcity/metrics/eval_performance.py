@@ -960,6 +960,60 @@ class AugmentationPerformanceEvaluatorMLP(PerformanceEvaluatorMLP):
         return ["gt", "aug_ood"]
 
 
+def _mean_absolute_feature_importance(
+    shap_values: Any,
+    *,
+    n_features: int,
+) -> np.ndarray:
+    """Reduce supported SHAP layouts to one mean absolute value per feature.
+
+    Older SHAP releases return a list of ``samples x features`` arrays for
+    multiclass models. Newer releases return a single
+    ``samples x features x outputs`` array. The number of model outputs may
+    differ between real and synthetic fits when a synthetic release omits a
+    rare target class; that must not change the feature-vector length.
+    """
+    if hasattr(shap_values, "values"):
+        shap_values = shap_values.values
+
+    if isinstance(shap_values, (list, tuple)):
+        arrays = [np.asarray(values) for values in shap_values]
+        if not arrays or any(
+            values.ndim != 2 or values.shape[1] != n_features
+            for values in arrays
+        ):
+            raise RuntimeError(
+                "Unsupported list-valued SHAP layout for feature ranking"
+            )
+        result = np.mean(
+            np.abs(np.stack(arrays, axis=0)),
+            axis=(0, 1),
+        )
+    else:
+        values = np.asarray(shap_values)
+        if values.ndim == 2 and values.shape[1] == n_features:
+            result = np.mean(np.abs(values), axis=0)
+        elif values.ndim == 3 and values.shape[1] == n_features:
+            # Current SHAP layout: samples x features x outputs.
+            result = np.mean(np.abs(values), axis=(0, 2))
+        elif values.ndim == 3 and values.shape[2] == n_features:
+            # Stacked legacy or samples x outputs x features layout.
+            result = np.mean(np.abs(values), axis=(0, 1))
+        else:
+            raise RuntimeError(
+                "Unsupported SHAP layout for feature ranking: "
+                f"shape={values.shape}, n_features={n_features}"
+            )
+
+    result = np.asarray(result, dtype=float).reshape(-1)
+    if result.shape != (n_features,) or not np.isfinite(result).all():
+        raise RuntimeError(
+            "Invalid feature-importance vector: "
+            f"shape={result.shape}, n_features={n_features}"
+        )
+    return result
+
+
 # TODO: investigate if this metric is relevant or not.
 class FeatureImportanceRankDistance(MetricEvaluator):
     """
@@ -1089,9 +1143,14 @@ class FeatureImportanceRankDistance(MetricEvaluator):
             gt_explainer = shap.TreeExplainer(gt_model)
             gt_shap = gt_explainer.shap_values(ood_X_gt)
 
-            # evaluate absolute influence for each class
-            syn_xai = np.mean(np.abs(syn_shap), axis=1)  # classes x n_features
-            gt_xai = np.mean(np.abs(gt_shap), axis=1)  # classes x n_features
+            syn_xai = _mean_absolute_feature_importance(
+                syn_shap,
+                n_features=ood_X_gt.shape[1],
+            )
+            gt_xai = _mean_absolute_feature_importance(
+                gt_shap,
+                n_features=ood_X_gt.shape[1],
+            )
 
             corr, pvalue = self.distance(syn_xai, gt_xai)
             corr = np.mean(np.nan_to_num(corr))

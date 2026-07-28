@@ -16,6 +16,7 @@ from synthcity.metrics.eval_performance import (
     PerformanceEvaluatorLinear,
     PerformanceEvaluatorMLP,
     PerformanceEvaluatorXGB,
+    _mean_absolute_feature_importance,
 )
 from synthcity.plugins import Plugin, Plugins
 from synthcity.plugins.core.dataloader import (
@@ -28,6 +29,42 @@ from synthcity.plugins.core.dataloader import (
 )
 from synthcity.utils.datasets.time_series.google_stocks import GoogleStocksDataloader
 from synthcity.utils.datasets.time_series.pbc import PBCDataloader
+
+
+def test_mean_absolute_feature_importance_supports_shap_layouts() -> None:
+    binary = np.arange(20, dtype=float).reshape(5, 4)
+    legacy = [binary, binary + 2]
+    modern_three_class = np.stack(
+        [binary, binary + 1, binary + 2],
+        axis=2,
+    )
+    modern_four_class = np.stack(
+        [binary, binary + 1, binary + 2, binary + 3],
+        axis=2,
+    )
+
+    np.testing.assert_allclose(
+        _mean_absolute_feature_importance(binary, n_features=4),
+        np.mean(np.abs(binary), axis=0),
+    )
+    np.testing.assert_allclose(
+        _mean_absolute_feature_importance(legacy, n_features=4),
+        np.mean(np.abs(np.stack(legacy, axis=0)), axis=(0, 1)),
+    )
+    assert _mean_absolute_feature_importance(
+        modern_three_class, n_features=4
+    ).shape == (4,)
+    assert _mean_absolute_feature_importance(
+        modern_four_class, n_features=4
+    ).shape == (4,)
+
+
+def test_mean_absolute_feature_importance_rejects_unknown_layout() -> None:
+    with pytest.raises(RuntimeError, match="Unsupported SHAP layout"):
+        _mean_absolute_feature_importance(
+            np.zeros((5, 3, 2, 4)),
+            n_features=4,
+        )
 
 
 @pytest.mark.parametrize("test_plugin", [Plugins().get("marginal_distributions")])
