@@ -1,3 +1,6 @@
+# Modified from upstream by Simone Castagno for the knee OA synthetic-data study.
+# See MODIFICATIONS.md.
+
 # third party
 import pandas as pd
 from typing import List, Tuple, Union
@@ -25,4 +28,3 @@ def discrete_columns(
             else:
                 discrete_cols.append(col)
     return discrete_cols
-

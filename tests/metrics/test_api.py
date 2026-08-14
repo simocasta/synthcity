@@ -1,3 +1,6 @@
+# Modified from upstream by Simone Castagno for the knee OA synthetic-data study.
+# See MODIFICATIONS.md.
+
 # third party
 import pandas as pd
 import pytest

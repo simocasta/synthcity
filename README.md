@@ -1,3 +1,11 @@
+<!-- Modified from upstream by Simone Castagno for the knee OA synthetic-data study; see MODIFICATIONS.md. -->
+
+> **Public study dependency fork; not an official upstream release.** Based on
+> `vanderschaarlab/synthcity` at commit
+> `bc228832262ff67e51efee5b66bd364f944d5ab7`. This public fork preserves the
+> exact dependency changes used by the study.
+> See [MODIFICATIONS.md](MODIFICATIONS.md).
+
 <h2 align="center">
   <img src="https://github.com/vanderschaarlab/synthcity/raw/main/docs/logo.png" height="150px">
 

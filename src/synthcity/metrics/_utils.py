@@ -1,3 +1,6 @@
+# Modified from upstream by Simone Castagno for the knee OA synthetic-data study.
+# See MODIFICATIONS.md.
+
 # stdlib
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
